@@ -214,9 +214,24 @@ void setupChannelList() {
   file.close();
 }
 
+const char *HTMLHEAD="<html><head> <meta charset=\"UTF-8\"> <link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\">";
+void HTMLBODY(char *ptr, const char *which) {
+  strcat(ptr, "<body><form class=\"wrapper\" action=\"");
+  strcat(ptr, which);
+  strcat(ptr, "\" method=\"post\"><div class=\"content\">");
+}
+void HTMLBODYEND(char *ptr) {
+  strcat(ptr, "</div></form></body></html>");
+}
+void HTMLSAVEBUTTON(char *ptr) {
+  strcat(ptr, "</div><div class=\"footer\"><input type=\"submit\" class=\"save\" value=\"Save changes\"/>");
+}
+
 const char *createQRGForm() {
   char *ptr = message;
-  strcpy(ptr, "<html><head><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\">");
+  strcpy(ptr, HTMLHEAD);
+  strcat(ptr, "<script src=\"rdz.js\"/>  <script> window.onload = prep; </script></head>");
+/*
   strcat(ptr, "<script type=\"text/javascript\">"
      "let stypes=new Map();"
      "stypes.set('4', 'RS41');"
@@ -241,13 +256,15 @@ const char *createQRGForm() {
      "  } txt.replaceWith(sel); } } "
      "  window.onload = prep; "
      "</script>");
-     
-  strcat(ptr, "</head><body><form action=\"qrg.html\" method=\"post\"><table><tr><th>ID</th><th>Active</th><th>Freq</th><th>Launchsite</th><th>Mode</th></tr>");
+*/
+  HTMLBODY(ptr, "qrg.html");     
+  //strcat(ptr, "<body><form class=\"wrapper\" action=\"qrg.html\" method=\"post\"><div class=\"content\"><table><tr><th>ID</th><th>Active</th><th>Freq</th><th>Launchsite</th><th>Mode</th></tr>");
+  strcat(ptr, "<table><tr><th>ID</th><th>Active</th><th>Freq</th><th>Launchsite</th><th>Mode</th></tr>");
   for (int i = 0; i < sonde.config.maxsonde; i++) {
     //String s = sondeTypeSelect(i >= sonde.nSonde ? 2 : sonde.sondeList[i].type);
     String site = sonde.sondeList[i].launchsite;
     sprintf(ptr + strlen(ptr), "<tr><td>%d</td><td><input name=\"A%d\" type=\"checkbox\" %s/></td>"
-            "<td><input name=\"F%d\" type=\"text\" value=\"%3.3f\"></td>"
+            "<td><input name=\"F%d\" type=\"text\" width=12 value=\"%3.3f\"></td>"
             "<td><input name=\"S%d\" type=\"text\" value=\"%s\"></td>"
             //"<td><select name=\"T%d\">%s</select></td>",
             "<td><input class='stype' name='T%d' value='%c'>",
@@ -258,7 +275,10 @@ const char *createQRGForm() {
             i + 1, i >= sonde.nSonde ? 2 : sondeTypeChar[sonde.sondeList[i].type] );
             //i + 1, s.c_str());
   }
-  strcat(ptr, "</table><input type=\"submit\" value=\"Update\"/></form></body></html>");
+  strcat(ptr, "</table>");
+  //</div><div class=\"footer\"><input type=\"submit\" class=\"update\" value=\"Update\"/>");
+  HTMLSAVEBUTTON(ptr);
+  HTMLBODYEND(ptr);
   Serial.printf("QRG form: size=%d bytes\n", strlen(message));
   return message;
 }
@@ -353,7 +373,9 @@ void setupWifiList() {
 const char *createWIFIForm() {
   char *ptr = message;
   char tmp[4];
-  strcpy(ptr, "<html><head><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\"></head><body><form action=\"wifi.html\" method=\"post\"><table><tr><th>Nr</th><th>SSID</th><th>Password</th></tr>");
+  strcpy(ptr, HTMLHEAD); strcat(ptr, "</head>");
+  HTMLBODY(ptr, "wifi.html");
+  strcat(ptr, "<table><tr><th>Nr</th><th>SSID</th><th>Password</th></tr>");
   for (int i = 0; i < MAX_WIFI; i++) {
     sprintf(tmp, "%d", i);
     sprintf(ptr + strlen(ptr), "<tr><td>%s</td><td><input name=\"S%d\" type=\"text\" value=\"%s\"/></td>"
@@ -362,7 +384,10 @@ const char *createWIFIForm() {
             i + 1, i < nNetworks ? networks[i].id.c_str() : "",
             i + 1, i < nNetworks ? networks[i].pw.c_str() : "");
   }
-  strcat(ptr, "</table><input type=\"submit\" value=\"Update\"></input></form></body></html>");
+  strcat(ptr, "</table>");
+  //</div><div class=\"footer\"><input type=\"submit\" class=\"update\" value=\"Update\"/>");
+  HTMLSAVEBUTTON(ptr);
+  HTMLBODYEND(ptr);
   Serial.printf("WIFI form: size=%d bytes\n", strlen(message));
   return message;
 }
@@ -436,7 +461,8 @@ void addSondeStatus(char *ptr, int i)
 
 const char *createStatusForm() {
   char *ptr = message;
-  strcpy(ptr, "<html><head><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\"><meta http-equiv=\"refresh\" content=\"5\"></head><body>");
+  strcpy(ptr, HTMLHEAD);
+  strcat(ptr, "<meta http-equiv=\"refresh\" content=\"5\"></head><body>");
 
   for (int i = 0; i < sonde.nSonde; i++) {
     int snum = (i + sonde.currentSonde) % sonde.nSonde;
@@ -607,7 +633,9 @@ void addConfigInt8List(char *ptr, int idx, const char *label, int8_t *list) {
 
 const char *createConfigForm() {
   char *ptr = message;
-  strcpy(ptr, "<html><head><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\"></head><body><form action=\"config.html\" method=\"post\"><table><tr><th>Option</th><th>Value</th></tr>");
+  strcpy(ptr, HTMLHEAD); strcat(ptr, "</head>");
+  HTMLBODY(ptr, "config.html");
+  strcat(ptr, "<table><tr><th>Option</th><th>Value</th></tr>");
   for (int i = 0; i < N_CONFIG; i++) {
     switch (config_list[i].type) {
       case -5: // Heading
@@ -636,7 +664,10 @@ const char *createConfigForm() {
         break;
     }
   }
-  strcat(ptr, "</table><input type=\"submit\" value=\"Update\"></input></form></body></html>");
+  strcat(ptr, "</table>");
+  //</div><div class=\"footer\"><input type=\"submit\" class=\"update\" value=\"Update\"/>");
+  HTMLSAVEBUTTON(ptr);
+  HTMLBODYEND(ptr);
   Serial.printf("Config form: size=%d bytes\n", strlen(message));
   return message;
 }
@@ -695,21 +726,23 @@ const char *handleConfigPost(AsyncWebServerRequest *request) {
 
 const char *ctrlid[] = {"rx", "scan", "spec", "wifi", "rx2", "scan2", "spec2", "wifi2"};
 
-const char *ctrllabel[] = {"Receiver (short keypress)", "Scanner (double keypress)", "Spectrum (medium keypress)", "WiFi (long keypress)",
-                           "Button 2 (short keypress)", "Button 2 (double keypress)", "Button 2 (medium keypress)", "Button 2 (long keypress)"
+const char *ctrllabel[] = {"Receiver/next freq. (short keypress)", "Scanner (double keypress)", "Spectrum (medium keypress)", "WiFi (long keypress)",
+                           "Button 2/next screen (short keypress)", "Button 2 (double keypress)", "Button 2 (medium keypress)", "Button 2 (long keypress)"
                           };
 
 const char *createControlForm() {
   char *ptr = message;
-  strcpy(ptr, "<html><head><link rel=\"stylesheet\" type=\"text/css\" href=\"style.css\"></head><body><form action=\"control.html\" method=\"post\">");
+  strcpy(ptr, HTMLHEAD); strcat(ptr, "</head>");
+  HTMLBODY(ptr, "control.html");
   for (int i = 0; i < 8; i++) {
-    strcat(ptr, "<input type=\"submit\" name=\"");
+    strcat(ptr, "<input class=\"ctlbtn\" type=\"submit\" name=\"");
     strcat(ptr, ctrlid[i]);
     strcat(ptr, "\" value=\"");
     strcat(ptr, ctrllabel[i]);
-    strcat(ptr, "\"></input><br>");
+    strcat(ptr, "\"></input>");
+    if(i==3) { strcat(ptr, "<p></p>"); }
   }
-  strcat(ptr, "</form></body></html>");
+  HTMLBODYEND(ptr);
   Serial.printf("Control form: size=%d bytes\n", strlen(message));
   return message;
 }
@@ -1141,7 +1174,7 @@ void unkHandler(T nmea) {
   }
 }
 
-#define DEBUG_GPS 0
+//#define DEBUG_GPS
 static bool gpsCourseOld;
 static int lastCourse;
 void gpsTask(void *parameter) {
@@ -1184,23 +1217,34 @@ void gpsTask(void *parameter) {
 #define UBX_SYNCH_2 0x62
 uint8_t ubx_set9k6[]={UBX_SYNCH_1, UBX_SYNCH_2, 0x06, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0xC0, 0x08, 0x00, 0x00, 0x80, 0x25, 0x00, 0x00, 0x03, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8D, 0x8F};
 uint8_t ubx_factorydef[]={UBX_SYNCH_1, UBX_SYNCH_2, 0x06, 0x09, 13, 0, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0x17, 0x8A };
+uint8_t ubx_hardreset[]={UBX_SYNCH_1, UBX_SYNCH_2, 0x06, 0x04, 4, 0, 0xff, 0xff, 0, 0, 0x0C, 0x5D };
 
 void initGPS() {
   if (sonde.config.gps_rxd < 0) return; // GPS disabled
   if (sonde.config.gps_txd >= 0) {  // TX enable, thus try setting baud to 9600 and do a factory reset
-    Serial.println("Trying to reset GPS...");
-    Serial2.begin(115200, SERIAL_8N1, sonde.config.gps_rxd, sonde.config.gps_txd);
-    Serial2.write(ubx_set9k6, sizeof(ubx_set9k6));
-    delay(100);
-    Serial2.begin(38400, SERIAL_8N1, sonde.config.gps_rxd, sonde.config.gps_txd);
-    Serial2.write(ubx_set9k6, sizeof(ubx_set9k6));
-    delay(100);
-    Serial2.begin(19200, SERIAL_8N1, sonde.config.gps_rxd, sonde.config.gps_txd);
-    Serial2.write(ubx_set9k6, sizeof(ubx_set9k6));
-    delay(100);
-    Serial2.begin(9600, SERIAL_8N1, sonde.config.gps_rxd, sonde.config.gps_txd);
-    Serial2.write(ubx_factorydef, sizeof(ubx_factorydef));
-    delay(1000);
+    File testfile = SPIFFS.open("/GPSRESET", FILE_READ);
+    if(testfile && !testfile.isDirectory()) {
+      testfile.close();
+      Serial.println("GPS factory reset...");
+      Serial2.begin(115200, SERIAL_8N1, sonde.config.gps_rxd, sonde.config.gps_txd);
+      Serial2.write(ubx_set9k6, sizeof(ubx_set9k6));
+      delay(100);
+      Serial2.begin(38400, SERIAL_8N1, sonde.config.gps_rxd, sonde.config.gps_txd);
+      Serial2.write(ubx_set9k6, sizeof(ubx_set9k6));
+      delay(100);
+      Serial2.begin(19200, SERIAL_8N1, sonde.config.gps_rxd, sonde.config.gps_txd);
+      Serial2.write(ubx_set9k6, sizeof(ubx_set9k6));
+      delay(100);
+      Serial2.begin(9600, SERIAL_8N1, sonde.config.gps_rxd, sonde.config.gps_txd);
+      Serial2.write(ubx_factorydef, sizeof(ubx_factorydef));
+      delay(100);
+      Serial2.write(ubx_hardreset, sizeof(ubx_hardreset));
+      //delay(5000);
+      SPIFFS.remove("/GPSRESET");
+    } else if (testfile) {
+      Serial.println("GPS reset file: not found/isdir");
+      testfile.close();
+    }
   } else {
     Serial2.begin(9600, SERIAL_8N1, sonde.config.gps_rxd, sonde.config.gps_txd);
   }
@@ -1987,8 +2031,15 @@ void loopDecoder() {
         s->countKT,
         s->crefKT
         );
-
-        rdzclient.write(raw, len>1024?1024:len);
+	//Serial.println("Writing rdzclient...");
+	if(len>1024) len=1024;
+        int wlen = rdzclient.write(raw, len);
+	if(wlen != len) {
+	   Serial.println("Writing rdzClient not OK, closing connection");
+	   rdzclient.stop();
+	   rdzclient = NULL;
+	}
+	//Serial.println("Writing rdzclient OK");
   }
   Serial.print("updateDisplay started... ");
   if (forceReloadScreenConfig) {
