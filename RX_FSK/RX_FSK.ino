@@ -46,6 +46,10 @@ String updateBinD = "/devel/update.ino.bin";
 String *updateBin = &updateBinM;
 
 #define LOCALUDPPORT 9002
+//Get real UTC time from NTP server
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = 0; //UTC
+const int   daylightOffset_sec = 0; //UTC
 
 boolean connected = false;
 WiFiUDP udp;
@@ -2383,6 +2387,7 @@ void enableNetwork(bool enable) {
       sondehub_station_update(&shclient, &sonde.config.sondehub);
     }
 #endif
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
     connected = true;
   } else {
     MDNS.end();
@@ -2997,6 +3002,21 @@ enum SHState { SH_DISCONNECTED, SH_CONNECTING, SH_CONN_IDLE, SH_CONN_WAITACK };
 
 SHState shState = SH_DISCONNECTED;
 
+/* Sonde.h: enum SondeType { STYPE_DFM, STYPE_DFM09_OLD, STYPE_RS41, STYPE_RS92, STYPE_M10, STYPE_M20, STYPE_DFM06_OLD, STYPE_MP3H }; */
+const char *sondeTypeStrSH[NSondeTypes] = { "DFM", "DFM", "RS41", "RS92", "M10", "M20", "DFM", "MRZ" };
+const char *dfmSubtypeStrSH[16] = { NULL, NULL, NULL, NULL, NULL, NULL,
+                                    "DFM06",  // 0x06
+                                    "PS15",   // 0x07
+                                    NULL, NULL,
+                                    "DFM09",  // 0x0A
+                                    "DFM17",  // 0x0B
+                                    "DFM09P", // 0x0C
+                                    "DFM17",  // 0x0D
+                                    NULL, NULL
+                                  };
+
+// in hours.... max allowed diff UTC <-> sonde time
+#define SONDEHUB_TIME_THRESHOLD (3)
 void sondehub_send_data(WiFiClient *client, SondeInfo *s, struct st_sondehub *conf) {
   Serial.println("sondehub_send_data()");
 
@@ -3004,7 +3024,9 @@ void sondehub_send_data(WiFiClient *client, SondeInfo *s, struct st_sondehub *co
   char rs_msg[MSG_SIZE];
   char *w;
   struct tm ts;
-  time_t t = s->time;
+  // For DFM, s->time is data from subframe DAT8 (gps date/hh/mm), and sec is from DAT1 (gps sec/usec)
+  // For all others, sec should always be 0 and time the exact time in seconds
+  time_t t = s->time + s->sec;
 
   while (client->available() > 0) {
     // data is available from remote server, process it...
@@ -3018,7 +3040,7 @@ void sondehub_send_data(WiFiClient *client, SondeInfo *s, struct st_sondehub *co
   }
 
   // Check if current sonde data is valid. If not, don't do anything....
-  if (String(s->ser) == "") return;	// Don't send anything without serial number
+  if (*s->ser == 0) return;	// Don't send anything without serial number
   if (((int)s->lat == 0) && ((int)s->lon == 0)) return;	// Sometimes these values are zeroes. Don't send those to the sondehub
   if ((int)s->alt > 50000) return;	// If alt is too high don't send to SondeHub
   if ((int)s->sats < 4) return;	// If not enough sats don't send to SondeHub
@@ -3041,11 +3063,26 @@ void sondehub_send_data(WiFiClient *client, SondeInfo *s, struct st_sondehub *co
     return;
   }
 
+  struct tm timeinfo;
+  time_t now;
+  time(&now);
+  gmtime_r(&now, &timeinfo);
+  if (timeinfo.tm_year <= (2016 - 1900)) {
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  if ( abs(now - (time_t)s->time) > (3600 * SONDEHUB_TIME_THRESHOLD) ) {
+    Serial.printf("Sonde time %d too far from current UTC time %ld", s->time, now);
+    return;
+  }
+
+  //  DFM uses UTC. Most of the other radiosondes use GPS time
+  // SondeHub expect datetime to be the same time sytem as the sonde transmits as time stamp
   if ( s->type == STYPE_RS41 || s->type == STYPE_RS92 || s->type == STYPE_M10 || s->type == STYPE_M20 ) {
     t += 18;	// convert back to GPS time from UTC time +18s
   }
 
-  ts = *gmtime(&t);
+  gmtime_r(&t, &ts);
 
   memset(rs_msg, 0, MSG_SIZE);
   w = rs_msg;
@@ -3057,9 +3094,7 @@ void sondehub_send_data(WiFiClient *client, SondeInfo *s, struct st_sondehub *co
           "\"uploader_callsign\": \"%s\","
           "\"time_received\": \"%04d-%02d-%02dT%02d:%02d:%02d.000Z\","
           "\"manufacturer\": \"%s\","
-          "\"type\": \"%s\","
           "\"serial\": \"%s\","
-          "\"frame\": %d,"
           "\"datetime\": \"%04d-%02d-%02dT%02d:%02d:%02d.000Z\","
           "\"lat\": %.6f,"
           "\"lon\": %.6f,"
@@ -3071,14 +3106,37 @@ void sondehub_send_data(WiFiClient *client, SondeInfo *s, struct st_sondehub *co
           "\"sats\": %d,"
           "\"rssi\": %.1f,",
           version_name, version_id, conf->callsign,
-          ts.tm_year + 1900, ts.tm_mon + 1, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec + s->sec,
-          manufacturer_string[s->type], sondeTypeStr[s->type], s->ser, s->frame,
+          timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+          manufacturer_string[s->type], s->ser,
           ts.tm_year + 1900, ts.tm_mon + 1, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec + s->sec,
           (float)s->lat, (float)s->lon, (float)s->alt, (float)s->freq, (float)s->hs, (float)s->vs,
           (float)s->dir, (int)s->sats, -((float)s->rssi / 2)
          );
-
   w += strlen(w);
+
+  if ( TYPE_IS_DFM(s->type) || TYPE_IS_METEO(s->type) || s->type == STYPE_MP3H ) {
+    // send frame as gps timestamp for these sonde, identical to autorx
+    // For M10, this is real GPS time (seconds since Jqn 6 1980, without adjusting for leap seconds)
+    // DFM and MP3H send real UTC (with leap seconds considered), so for them the frame number actually
+    // is gps time plus number of leap seconds since the beginning of GPS time.
+    sprintf(w, "\"frame\": %d,", int(t - 315964800));
+  } else {
+    sprintf(w, "\"frame\": %d,", s->frame);
+  }
+  w += strlen(w);
+
+  sprintf(w, "\"type\": \"%s\",", sondeTypeStrSH[s->type]);
+  w += strlen(w);
+
+  /* if there is a subtype (DFM only) */
+  if ( TYPE_IS_DFM(s->type) && s->subtype > 0 && s->subtype < 16 ) {
+    const char *t = dfmSubtypeStrSH[s->subtype];
+    // as in https://github.com/projecthorus/radiosonde_auto_rx/blob/e680221f69a568e1fdb24e76db679233f32cb027/auto_rx/autorx/sonde_specific.py#L84
+    if (t) sprintf(w, "\"subtype\": \"%s\",", t);
+    else sprintf(w, "\"subtype\": \"DFMx%X\",", s->subtype); // Unknown subtype
+    w += strlen(w);
+  }
+
   if (((int)s->temperature != 0) && ((int)s->relativeHumidity != 0)) {
     sprintf(w,
             "\"temp\": %.2f,"
@@ -3087,12 +3145,14 @@ void sondehub_send_data(WiFiClient *client, SondeInfo *s, struct st_sondehub *co
            );
     w += strlen(w);
   }
+
   sprintf(w,
           "\"uploader_position\": [ %s, %s, %s ],"
           "\"uploader_antenna\": \"%s\""
           "}]",
           conf->lat, conf->lon, conf->alt, conf->antenna
          );
+  w += strlen(w);
 
   client->println("PUT /sondes/telemetry HTTP/1.1");
   client->print("Host: ");
